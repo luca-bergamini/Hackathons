@@ -1,0 +1,46 @@
+# Modelli Candidate da confrontare con il Legacy.
+# NON hardcodare model_id nel codice Python.
+# Costi da model_list.json — usare i 3 più economici come Candidate.
+
+# Judge model — usato per LLM-as-a-Judge evaluation.
+# DEVE essere diverso dai modelli valutati (conflitto di interesse).
+judge:
+  model_id: "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+  display_name: "Claude Haiku 4.5"
+  provider: "anthropic"
+  max_tokens: 1024
+  temperature: 0.0
+
+# Candidate models — quelli da valutare come sostituti del Legacy.
+models:
+  - model_id: "openai.gpt-oss-20b-1:0"
+    display_name: "gpt-oss-20b"
+    provider: "openai"
+    max_tokens: 1024
+    temperature: 0.0
+    cost_input_1m: 0.08
+    cost_output_1m: 0.35
+
+  - model_id: "qwen.qwen3-next-80b-a3b"
+    display_name: "Qwen3 Next 80B A3B"
+    provider: "qwen"
+    max_tokens: 1024
+    temperature: 0.0
+    cost_input_1m: 0.18
+    cost_output_1m: 0.70
+
+  - model_id: "eu.amazon.nova-2-lite-v1:0"
+    display_name: "Nova 2 Lite"
+    provider: "amazon"
+    max_tokens: 1024
+    temperature: 0.0
+    cost_input_1m: 0.34
+    cost_output_1m: 2.87
+
+  - model_id: "mistral.devstral-2-123b"
+    display_name: "Devstral 2 123B"
+    provider: "mistral"
+    max_tokens: 1024
+    temperature: 0.0
+    cost_input_1m: 0.48
+    cost_output_1m: 2.40

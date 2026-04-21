@@ -1,0 +1,89 @@
+stages:
+  - lint
+  - test
+  - quality
+
+default:
+  timeout: 30 minutes
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  PYTHON_VERSION: "3.11"
+  SONAR_PROJECT_KEY: "hackathon-farmavita-${CI_PROJECT_NAME}"
+
+cache:
+  key: "${CI_JOB_NAME}-${PYTHON_VERSION}"
+  paths:
+    - .cache/pip
+    - .cache/apt
+
+# ---------------------------------------------------------------------------
+# Stage 1: Linting with Ruff
+# ---------------------------------------------------------------------------
+lint:
+  stage: lint
+  image: python:${PYTHON_VERSION}-slim
+  before_script:
+    - pip install ruff --quiet
+  script:
+    - echo "=== Running Ruff Linter ==="
+    - ruff check src/ --output-format=json > ruff-report.json
+    - ruff check src/ --statistics
+    - echo "=== Lint complete ==="
+  artifacts:
+    paths:
+      - ruff-report.json
+    when: always
+    expire_in: 1 week
+  allow_failure: true
+
+# ---------------------------------------------------------------------------
+# Stage 2: Tests with coverage
+# ---------------------------------------------------------------------------
+test:
+  stage: test
+  image: python:${PYTHON_VERSION}-slim
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq libpq-dev > /dev/null 2>&1
+    - pip install -r requirements.txt --quiet
+    - pip install pytest pytest-cov --quiet
+  script:
+    - echo "=== Running Tests ==="
+    - pytest tests/ -v --cov=src --cov-report=xml:coverage.xml --cov-report=term-missing
+    - echo "=== Tests complete ==="
+  artifacts:
+    paths:
+      - coverage.xml
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    when: always
+    expire_in: 1 week
+
+# ---------------------------------------------------------------------------
+# Stage 3: SonarQube analysis
+# ---------------------------------------------------------------------------
+sonarqube:
+  stage: quality
+  image:
+    name: sonarsource/sonar-scanner-cli:latest
+    entrypoint: [""]
+  variables:
+    SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
+    GIT_DEPTH: "0"
+  cache:
+    key: "${CI_JOB_NAME}"
+    paths:
+      - .sonar/cache
+  script:
+    - sonar-scanner
+      -Dsonar.projectKey=${SONAR_PROJECT_KEY}
+      -Dsonar.sources=src/
+      -Dsonar.tests=tests/
+      -Dsonar.python.coverage.reportPaths=coverage.xml
+      -Dsonar.host.url=${SONAR_HOST_URL}
+      -Dsonar.token=${SONAR_TOKEN}
+  dependencies:
+    - test
+  allow_failure: true

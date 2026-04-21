@@ -1,0 +1,38 @@
+[project]
+name = "nrt-pipeline"
+version = "0.1.0"
+description = "Non-Regression Testing pipeline for LLM model migration — Hackathon team template"
+requires-python = ">=3.11"
+
+dependencies = [
+    "boto3",
+    "pandas",
+    "openpyxl",
+    "streamlit",
+    "python-dotenv",
+    "pyyaml",
+    "ipykernel",
+    "sqlparse",
+    "scipy",
+    "fastapi",
+    "uvicorn[standard]",
+]
+
+[project.optional-dependencies]
+development = [
+    "pytest",
+    "pytest-cov",
+    "ruff",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[tool.coverage.run]
+omit = [
+    "src/frontend/*",
+    "src/utils/*",
+]
+
+[tool.ruff]
+line-length = 100

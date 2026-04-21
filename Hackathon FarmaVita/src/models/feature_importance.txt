@@ -1,0 +1,46 @@
+Feature Importance (XGBoost - log-trained)
+==================================================
+
+promo                                    0.550031
+store_dow_avg                            0.143369
+store_avg_sales                          0.056013
+is_weekend                               0.041137
+store_med_sales                          0.033640
+day_of_week                              0.019655
+dow_sin                                  0.016580
+week_of_year                             0.014336
+day_of_month                             0.012435
+month_cos                                0.010064
+dow_cos                                  0.008567
+woy_cos                                  0.008210
+day_of_year                              0.008109
+store_type_assort                        0.007351
+year                                     0.007196
+month                                    0.007085
+type_code_enc                            0.005722
+level_code_enc                           0.004831
+woy_sin                                  0.004765
+month_sin                                0.004740
+has_promo2                               0.004240
+state_enc                                0.003652
+store_id                                 0.003418
+distance_meters                          0.003374
+distance_x_type                          0.003078
+competition_open_months                  0.002452
+unemployment_rate                        0.002245
+gdp_index                                0.001937
+promo2_active                            0.001897
+consumer_confidence_index                0.001581
+state_month_avg                          0.001535
+trend_index                              0.001056
+has_local_event                          0.001050
+temperature_max                          0.001012
+temperature_avg                          0.000994
+temperature_min                          0.000967
+precipitation_mm                         0.000846
+weather_event_enc                        0.000828
+is_open                                  0.000000
+
+Totale feature: 39
+RMSPE Validation: 0.1350
+Best params: {'max_depth': 13, 'n_estimators': 800, 'learning_rate': 0.022917781729045676, 'subsample': 0.6141948864529791, 'colsample_bytree': 0.5826796528609031, 'min_child_weight': 17, 'reg_alpha': 0.0023031836504777002, 'reg_lambda': 0.0021033342332997685, 'gamma': 0.013077314513867448}

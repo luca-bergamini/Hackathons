@@ -1,0 +1,242 @@
+stages:
+  - lint
+  - test
+  - quality
+  - release
+  - deliverable
+
+workflow:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /^release/i'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /^consegna deliverable/i'
+
+default:
+  timeout: 30 minutes
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  PYTHON_VERSION: "3.11"
+  SONAR_PROJECT_KEY: "hackathon-genai-innovations-${CI_PROJECT_NAME}"
+
+cache:
+  key: "${CI_JOB_NAME}-${PYTHON_VERSION}"
+  paths:
+    - .cache/pip
+    - .cache/apt
+
+# ---------------------------------------------------------------------------
+# Stage 1: Linting with Ruff
+# ---------------------------------------------------------------------------
+lint:
+  stage: lint
+  rules:
+    - if: '$CI_COMMIT_MESSAGE =~ /^release/i'
+  image: python:${PYTHON_VERSION}-slim
+  before_script:
+    - pip install ruff --quiet
+  script:
+    - echo "=== Running Ruff Linter ==="
+    - ruff check src/ --output-format=json > ruff-report.json
+    - ruff check src/ --statistics
+    - echo "=== Lint complete ==="
+  artifacts:
+    paths:
+      - ruff-report.json
+    when: always
+    expire_in: 1 week
+  allow_failure: true
+
+# ---------------------------------------------------------------------------
+# Stage 2: Tests with coverage
+# ---------------------------------------------------------------------------
+test:
+  stage: test
+  rules:
+    - if: '$CI_COMMIT_MESSAGE =~ /^release/i'
+  image: python:${PYTHON_VERSION}-slim
+  before_script:
+    - pip install -e ".[development]" --quiet
+  script:
+    - echo "=== Running Tests ==="
+    - pytest tests/ -v --cov=src --cov-report=xml:coverage.xml --cov-report=term-missing
+    - echo "=== Tests complete ==="
+  allow_failure: true
+  artifacts:
+    paths:
+      - coverage.xml
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    when: always
+    expire_in: 1 week
+
+# ---------------------------------------------------------------------------
+# Stage 3: SonarQube analysis
+# ---------------------------------------------------------------------------
+sonarqube:
+  stage: quality
+  rules:
+    - if: '$CI_COMMIT_MESSAGE =~ /^release/i'
+  image:
+    name: sonarsource/sonar-scanner-cli:latest
+    entrypoint: [""]
+  variables:
+    SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
+    GIT_DEPTH: "0"
+  cache:
+    key: "${CI_JOB_NAME}"
+    paths:
+      - .sonar/cache
+  script:
+    - sonar-scanner
+      -Dsonar.projectKey=${SONAR_PROJECT_KEY}
+      -Dsonar.sources=src/
+      -Dsonar.tests=tests/
+      -Dsonar.python.coverage.reportPaths=coverage.xml
+      -Dsonar.host.url=${SONAR_HOST_URL}
+      -Dsonar.token=${SONAR_TOKEN}
+    - echo "=== Attendo completamento analisi ==="
+    - |
+      TASK_ID=$(grep "^ceTaskId=" .scannerwork/report-task.txt | cut -d= -f2)
+      echo "Task ID: $TASK_ID"
+      for i in $(seq 1 20); do
+        STATUS=$(curl -sf -u "${SONAR_TOKEN}:" \
+          "${SONAR_HOST_URL}/api/ce/task?id=${TASK_ID}" \
+          | python3 -c "import sys,json; print(json.load(sys.stdin)['task']['status'])")
+        echo "  [$i] status: $STATUS"
+        [ "$STATUS" = "SUCCESS" ] && break
+        [ "$STATUS" = "FAILED"  ] && echo "Analisi Sonar fallita" && exit 1
+        sleep 5
+      done
+    - echo "=== Scarico metriche ==="
+    - |
+      METRICS="coverage,bugs,vulnerabilities,code_smells,duplicated_lines_density,reliability_rating,security_rating,sqale_rating,ncloc,cognitive_complexity"
+      curl -s -u "${SONAR_TOKEN}:" "${SONAR_HOST_URL}/api/measures/component?component=${SONAR_PROJECT_KEY}&metricKeys=${METRICS}" > sonar-measures.json
+      curl -s -u "${SONAR_TOKEN}:" "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}" > sonar-quality-gate.json
+    - echo "=== Report Sonar ==="
+    - python3 -m json.tool sonar-measures.json || cat sonar-measures.json
+    - python3 -m json.tool sonar-quality-gate.json || cat sonar-quality-gate.json
+  dependencies:
+    - test
+  allow_failure: true
+  artifacts:
+    paths:
+      - sonar-measures.json
+      - sonar-quality-gate.json
+      - .scannerwork/report-task.txt
+    when: always
+    expire_in: 1 week
+
+# ---------------------------------------------------------------------------
+# Stage 4: Claude Code evaluation (triggered on release commits)
+# ---------------------------------------------------------------------------
+release-eval:
+  stage: release
+  rules:
+    - if: '$CI_COMMIT_MESSAGE =~ /^release/i'
+  image: nikolaik/python-nodejs:python3.11-nodejs20
+  timeout: 20 minutes
+  dependencies:
+    - lint
+    - test
+    - sonarqube
+  cache:
+    key: "claude-code-npm"
+    paths:
+      - .cache/npm
+  before_script:
+    - |
+      STATUS=$(curl -sf "${VALIDATION_API_URL}/status" | python3 -c "import sys,json; print(json.load(sys.stdin).get('submissions_enabled','true'))" 2>/dev/null || echo "true")
+      if [ "$STATUS" = "False" ] || [ "$STATUS" = "false" ]; then
+        echo "ERROR: La classifica e' congelata — submission non accettate."
+        exit 1
+      fi
+    - npm install -g @anthropic-ai/claude-code --cache .cache/npm --prefer-offline --quiet
+    - pip install requests --quiet
+  script:
+    - echo "=== Downloading evaluator from API ==="
+    - 'curl -sf "${VALIDATION_API_URL}/assets/evaluator" -o /tmp/evaluator.py'
+    - echo "=== Running Claude Code Evaluation ==="
+    - useradd -m evaluator 2>/dev/null || true
+    - chown -R evaluator "${CI_PROJECT_DIR}"
+    - chown evaluator /tmp/evaluator.py
+    - |
+      su evaluator -c "
+        cd ${CI_PROJECT_DIR} && \
+        ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY} \
+        python /tmp/evaluator.py \
+          --team-id ${CI_PROJECT_NAME} \
+          --commit-sha ${CI_COMMIT_SHA} \
+          --api-url ${VALIDATION_API_URL}
+      "
+    - echo "=== Evaluation complete ==="
+
+# ---------------------------------------------------------------------------
+# Stage 5a: Deliverable Intermedio 1 (triggered on specific commit message)
+# ---------------------------------------------------------------------------
+deliverable-1:
+  stage: deliverable
+  image: python:${PYTHON_VERSION}-slim
+  rules:
+    - if: '$CI_COMMIT_MESSAGE =~ /^consegna deliverable intermedio 1/i'
+  before_script:
+    - pip install requests --quiet
+  script:
+    - echo "=== Invio Deliverable Intermedio 1 ==="
+    - |
+      if [ ! -f "deliverable_intermedio_1.csv" ]; then
+        echo "ERROR: deliverable_intermedio_1.csv non trovato nella root del repository"
+        exit 1
+      fi
+    - |
+      python3 -c "
+      import requests, base64, sys
+
+      with open('deliverable_intermedio_1.csv', 'rb') as f:
+          csv_b64 = base64.b64encode(f.read()).decode()
+
+      payload = {
+          'team_id': '${CI_PROJECT_NAME}',
+          'commit_sha': '${CI_COMMIT_SHA}',
+          'csv_b64': csv_b64,
+      }
+
+      resp = requests.post('${VALIDATION_API_URL}/deliverable/1', json=payload, timeout=30)
+      print(f'Status: {resp.status_code}')
+      print(resp.text)
+
+      if resp.status_code not in (200, 201):
+          sys.exit(1)
+      "
+    - echo "=== Deliverable 1 inviato ==="
+
+# ---------------------------------------------------------------------------
+# Stage 5b: Deliverable Intermedio 2 (triggered on specific commit message)
+# ---------------------------------------------------------------------------
+deliverable-2:
+  stage: deliverable
+  image: python:${PYTHON_VERSION}-slim
+  rules:
+    - if: '$CI_COMMIT_MESSAGE =~ /^consegna deliverable intermedio 2/i'
+  before_script:
+    - pip install requests --quiet
+  script:
+    - echo "=== Notifica Deliverable Intermedio 2 ==="
+    - |
+      python3 -c "
+      import requests, sys
+
+      payload = {
+          'team_id': '${CI_PROJECT_NAME}',
+          'commit_sha': '${CI_COMMIT_SHA}',
+      }
+
+      resp = requests.post('${VALIDATION_API_URL}/deliverable/2', json=payload, timeout=30)
+      print(f'Status: {resp.status_code}')
+      print(resp.text)
+
+      if resp.status_code not in (200, 201):
+          sys.exit(1)
+      "
+    - echo "=== Deliverable 2 notificato — in attesa di revisione giuria ==="

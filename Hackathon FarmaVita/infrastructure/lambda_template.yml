@@ -1,0 +1,64 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Hackathon FarmaVita - API di predizione vendite
+  Template CloudFormation/SAM per il deploy dell'API su Lambda + API Gateway
+
+# Questo template e' un punto di partenza. I team possono modificarlo
+# o usare CDK/Terraform come alternativa.
+
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: python3.11
+    MemorySize: 512
+    Environment:
+      Variables:
+        # Nota: queste variabili sono per il serving del modello.
+        # Il DB RDS sorgente e' di sola lettura e serve solo per l'ingestion iniziale.
+        # Per il serving, il modello dovrebbe essere caricato da S3.
+        MODEL_S3_BUCKET: !Ref ModelBucket
+
+Parameters:
+  ModelBucket:
+    Type: String
+    Description: Nome del bucket S3 che contiene il modello addestrato
+
+Resources:
+  # ---------------------------------------------------------------------------
+  # Lambda Function - API di predizione
+  # ---------------------------------------------------------------------------
+  PredictFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "hackathon-farmavita-predict"
+      Handler: src.serving.main.handler  # Richiede Mangum: handler = Mangum(app)
+      CodeUri: .
+      Description: API di predizione vendite FarmaVita
+      Events:
+        Predict:
+          Type: Api
+          Properties:
+            Path: /predict
+            Method: post
+        Explain:
+          Type: Api
+          Properties:
+            Path: /explain
+            Method: post
+        Health:
+          Type: Api
+          Properties:
+            Path: /health
+            Method: get
+      Policies:
+        - AmazonBedrockFullAccess  # Per il RAG con Bedrock
+        - AmazonS3ReadOnlyAccess   # Per leggere modello da S3
+
+Outputs:
+  ApiUrl:
+    Description: URL dell'API Gateway
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+  FunctionArn:
+    Description: ARN della Lambda Function
+    Value: !GetAtt PredictFunction.Arn

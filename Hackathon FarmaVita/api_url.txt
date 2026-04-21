@@ -1,0 +1,7 @@
+# Inserire qui l'URL base della vostra API (una sola riga, senza spazi)
+# Esempio: https://xxx.execute-api.eu-we-st1.amazonaws.com/prod
+# Esempio: http://ec2-xx-xx-xx-xx.eu-west-1.compute.amazonaws.com:8000
+#
+# Questo file viene letto automaticamente dagli organizzatori per la valutazione.
+# Dopo aver deployato l'API, sostituite questa riga con il vostro URL e fate push.
+https://10gcjs7pne.execute-api.eu-west-1.amazonaws.com

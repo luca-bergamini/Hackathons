@@ -1,0 +1,8 @@
+agent_id,task,numero_record,percentuale_ground_truth,numero_record_malformati
+agent-001,classification,45,95.6,2
+agent-002,context_qa,38,78.9,1
+agent-003,metadata_extraction,52,100.0,0
+agent-004,code_generation,29,86.2,3
+agent-005,summarization,41,61.0,0
+agent-006,sql_generation,33,90.9,1
+agent-007,pii_redaction,27,0.0,0

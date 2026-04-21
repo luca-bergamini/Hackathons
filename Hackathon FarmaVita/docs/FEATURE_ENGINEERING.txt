@@ -1,0 +1,159 @@
+================================================================================
+  FEATURE ENGINEERING — Hackathon FarmaVita (Team 04)
+================================================================================
+
+Totale feature create: 36
+Target: log1p(sales) — predizioni riconvertite con expm1()
+Metrica: RMSPE (Root Mean Square Percentage Error)
+
+================================================================================
+  FEATURE ORIGINALI DAL DATABASE (raw + augmentation)
+================================================================================
+
+#   Feature                     Tipo       Sorgente                  Descrizione
+--- --------------------------- ---------- ------------------------- ------------------------------------
+ 1  store_id                    int        raw.daily_sales           ID univoco del negozio (1-1115)
+ 2  is_open                     int (0/1)  raw.daily_sales           1=negozio aperto, 0=chiuso
+ 3  distance_meters             float      raw.competitions          Distanza in metri dal competitor piu' vicino
+ 4  open_since_month            float      raw.competitions          Mese di apertura del competitor
+ 5  open_since_year             float      raw.competitions          Anno di apertura del competitor
+ 6  temperature_avg             float      augmentation.weather      Temperatura media giornaliera (°C)
+ 7  temperature_min             float      augmentation.weather      Temperatura minima giornaliera (°C)
+ 8  temperature_max             float      augmentation.weather      Temperatura massima giornaliera (°C)
+ 9  precipitation_mm            float      augmentation.weather      Precipitazioni giornaliere (mm)
+10  gdp_index                   float      augmentation.macroeconomic  Indice PIL nazionale
+11  unemployment_rate           float      augmentation.macroeconomic  Tasso di disoccupazione (%)
+12  consumer_confidence_index   float      augmentation.macroeconomic  Indice fiducia consumatori
+13  trend_index                 float      augmentation.google_trends  Indice Google Trends
+14  has_local_event             int (0/1)  augmentation.local_events   Presenza evento locale
+
+================================================================================
+  FEATURE CATEGORICHE ENCODATE (LabelEncoder)
+================================================================================
+
+#   Feature                     Originale       Cardinalita  Razionale
+--- --------------------------- --------------- ------------ -----------------------------------------
+15  type_code_enc               raw.store_types      4       Tipo negozio (a/b/c/d) — ogni tipo ha
+                                                             volumi di vendita strutturalmente diversi
+16  level_code_enc              raw.assortment       3       Livello assortimento (a/b/c) — negozi con
+                                                             piu' prodotti vendono di piu'
+17  state_enc                   augmentation         16      Stato tedesco — festivita', abitudini e
+                                                             potere d'acquisto variano per regione
+18  weather_event_enc           augmentation         5       Tipo evento meteo — eventi estremi
+                                                             (neve, tempeste) riducono le vendite
+
+================================================================================
+  FEATURE TEMPORALI (estratte dalla colonna date)
+================================================================================
+
+#   Feature                     Tipo       Razionale
+--- --------------------------- ---------- -----------------------------------------
+19  day_of_week                 int (0-6)  Pattern settimanale: lunedi' diverso da
+                                           sabato. Domenica molti negozi chiusi.
+20  month                       int (1-12) Stagionalita' mensile: dicembre (Natale)
+                                           ha vendite molto piu' alte.
+21  year                        int        Trend annuale: crescita o calo nel tempo.
+22  day_of_month                int (1-31) Effetto inizio/fine mese (stipendi,
+                                           pagamenti).
+23  week_of_year                int (1-52) Granularita' piu' fine del mese per
+                                           catturare settimane particolari (Pasqua, ecc.)
+24  day_of_year                 int (1-366) Stagionalita' a granularita' giornaliera,
+                                           cattura pattern annuali precisi.
+25  is_weekend                  int (0/1)  Sabato/Domenica hanno comportamenti
+                                           d'acquisto radicalmente diversi.
+
+================================================================================
+  FEATURE CICLICHE (sin/cos encoding)
+================================================================================
+
+#   Feature                     Da                  Razionale
+--- --------------------------- ------------------- -----------------------------------------
+26  dow_sin                     day_of_week         Il modello non capisce che domenica(6) e'
+27  dow_cos                     day_of_week         vicina a lunedi'(0). Sin/cos trasformano
+                                                    i valori ciclici in coordinate continue.
+28  month_sin                   month               Stessa logica: dicembre(12) e' vicino a
+29  month_cos                   month               gennaio(1) nello spazio sin/cos.
+30  woy_sin                     week_of_year        Settimana 52 e' vicina a settimana 1.
+31  woy_cos                     week_of_year
+
+================================================================================
+  FEATURE DI TARGET ENCODING (medie storiche dal solo train set)
+================================================================================
+
+#   Feature                     Aggregazione            Razionale
+--- --------------------------- ----------------------- -----------------------------------------
+32  store_avg_sales             mean(sales) per store   Ogni negozio ha un "livello base" di
+                                                        vendite diverso. Un negozio grande vende
+                                                        strutturalmente piu' di uno piccolo.
+33  store_med_sales             median(sales) per store Come sopra, ma mediana e' piu' robusta
+                                                        agli outlier (giorni promo, Natale).
+34  store_dow_avg               mean(sales) per         Cattura il pattern settimanale SPECIFICO
+                                store x day_of_week     di ogni negozio: il negozio 42 di lunedi'
+                                                        vende diversamente dal negozio 100.
+35  state_month_avg             mean(sales) per         Cattura la stagionalita' regionale: lo
+                                state x month           stesso mese ha impatti diversi per stato.
+
+================================================================================
+  FEATURE DI INTERAZIONE
+================================================================================
+
+#   Feature                     Formula                     Razionale
+--- --------------------------- --------------------------- --------------------------
+36  competition_open_months     (year-open_since_year)*12   Mesi dall'apertura del
+                                + (month-open_since_month)  competitor. L'impatto e'
+                                                            forte all'inizio, poi si
+                                                            stabilizza.
+37  distance_x_type             distance_meters *           L'effetto della competizione
+                                type_code_enc               dipende dal tipo negozio:
+                                                            un tipo "a" reagisce
+                                                            diversamente da un tipo "d".
+38  store_type_assort           type_code_enc * 10 +        Combinazione tipo+assortimento
+                                level_code_enc              crea "profili" di negozio
+                                                            unici (es. tipo_a+assort_c).
+
+================================================================================
+  FEATURE PROMO (da raw.promo_daily e raw.promo_continuous)
+================================================================================
+
+#   Feature                     Sorgente                Razionale
+--- --------------------------- ----------------------- --------------------------
+39  promo                       raw.promo_daily         Flag promo giornaliera attiva.
+                                                        Le promozioni sono il driver
+                                                        #1 delle vendite — un negozio
+                                                        in promo vende significativamente
+                                                        di piu'.
+40  has_promo2                  raw.promo_continuous    Flag: il negozio partecipa a
+                                                        Promo2 (promozione continuativa).
+41  promo2_active               raw.promo_continuous    Flag: Promo2 e' attiva in
+                                (calcolato)             quella data specifica. Calcolato
+                                                        da since_week, since_year e
+                                                        active_months.
+
+================================================================================
+  STRATEGIA DI IMPUTATION DEI VALORI MANCANTI
+================================================================================
+
+Feature                         Strategia                   Razionale
+------------------------------- --------------------------- --------------------------
+temperature_*, precipitation    Mediana per (state, month)  Clima simile per regione/mese
+gdp_index, consumer_confidence  Forward fill temporale      Dati nazionali mensili
+unemployment_rate               Mediana per (state, year)   Varia per regione e anno
+trend_index                     Mediana per (state, month)  Trend stagionali e regionali
+distance_meters, open_since_*   Mediana globale             Attributi fissi dello store
+has_local_event                 0 (nessun evento)           Default conservativo
+weather_event                   "None"                      Nessun evento meteo
+unemployment_rate < 0           abs() (valore assoluto)     Dati sporchi da augmentation
+
+================================================================================
+  NOTE
+================================================================================
+
+- Target: log1p(sales) — il training avviene sulla scala logaritmica per
+  migliorare il RMSPE. Le predizioni sono riconvertite con expm1().
+- customers NON e' usata come feature perche' non e' disponibile al momento
+  della predizione (non si sa quanti clienti verranno).
+- Le medie storiche (target encoding) sono calcolate SOLO dal train set
+  per evitare data leakage.
+- I negozi chiusi (is_open=0) hanno predizione automatica = 0.
+
+================================================================================

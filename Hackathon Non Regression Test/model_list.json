@@ -1,0 +1,30 @@
+{
+    "Nova 2 Lite": {
+        "cost_input_1M_token": 0.34,
+        "cost_output_1M_token": 2.87
+    },
+    "Claude Sonnet 4.6": {
+        "cost_input_1M_token": 3.00,
+        "cost_output_1M_token": 15.00
+    },
+    "Claude Haiku 4.5": {
+        "cost_input_1M_token": 1.00,
+        "cost_output_1M_token": 5.00
+    },
+    "Llama 3.2 3B Instruct": {
+        "cost_input_1M_token": 0.17,
+        "cost_output_1M_token": 0.17
+    },
+    "Devstral 2 123B": {
+        "cost_input_1M_token": 0.48,
+        "cost_output_1M_token": 2.40
+    },
+    "gpt-oss-20b": {
+        "cost_input_1M_token": 0.08,
+        "cost_output_1M_token": 0.35
+    },
+    "Qwen3 Next 80B A3B": {
+        "cost_input_1M_token": 0.18,
+        "cost_output_1M_token": 0.70
+    }
+  }
